@@ -1,0 +1,533 @@
+/* Reset and Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Roboto', sans-serif;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+    color: #e3f2fd;
+    overflow: hidden;
+    height: 100vh;
+}
+
+#app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Typography */
+.orbitron {
+    font-family: 'Orbitron', monospace;
+}
+
+/* Mission Control Layout */
+.mission-control {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+}
+
+/* Header Styles */
+.header {
+    background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
+    padding: 1rem 2rem;
+    border-bottom: 2px solid #00d4ff;
+    box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mission-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: #00d4ff;
+    text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+}
+
+.header-info {
+    display: flex;
+    gap: 2rem;
+    align-items: center;
+}
+
+.timer-display {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.2rem;
+    color: #4fc3f7;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: 1px solid #00d4ff;
+}
+
+.phase-indicator {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    border: 2px solid;
+}
+
+.phase-pre-launch {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+    border-color: #ffc107;
+}
+
+.phase-boost {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+    border-color: #4caf50;
+}
+
+.phase-coast {
+    background: rgba(33, 150, 243, 0.2);
+    color: #2196f3;
+    border-color: #2196f3;
+}
+
+.phase-apogee {
+    background: rgba(156, 39, 176, 0.2);
+    color: #9c27b0;
+    border-color: #9c27b0;
+}
+
+.phase-descent {
+    background: rgba(255, 152, 0, 0.2);
+    color: #ff9800;
+    border-color: #ff9800;
+}
+
+.phase-recovery {
+    background: rgba(76, 175, 80, 0.2);
+    color: #4caf50;
+    border-color: #4caf50;
+}
+
+/* Main Content Layout */
+.main-content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 300px 1fr 300px;
+    gap: 1rem;
+    padding: 1rem;
+    overflow: hidden;
+}
+
+/* Panel Styles */
+.panel {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    backdrop-filter: blur(10px);
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.panel-header {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.1rem;
+    color: #00d4ff;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.3);
+}
+
+/* Left Panel Styles */
+.checklist-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.checklist-item:hover {
+    background: rgba(0, 212, 255, 0.1);
+}
+
+.checklist-item.completed {
+    background: rgba(76, 175, 80, 0.2);
+}
+
+.checklist-checkbox {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #00d4ff;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.checklist-checkbox.checked {
+    background: #4caf50;
+    border-color: #4caf50;
+}
+
+.checklist-text {
+    font-size: 0.9rem;
+    flex: 1;
+}
+
+.system-health {
+    margin-top: 1.5rem;
+}
+
+.health-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.health-status {
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.status-good {
+    background: rgba(76, 175, 80, 0.3);
+    color: #4caf50;
+}
+
+.status-warning {
+    background: rgba(255, 193, 7, 0.3);
+    color: #ffc107;
+}
+
+.status-error {
+    background: rgba(244, 67, 54, 0.3);
+    color: #f44336;
+}
+
+.control-buttons {
+    margin-top: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.btn {
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+}
+
+.btn-primary {
+    background: linear-gradient(45deg, #2196f3, #21cbf3);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(33, 150, 243, 0.4);
+}
+
+.btn-success {
+    background: linear-gradient(45deg, #4caf50, #8bc34a);
+    color: white;
+}
+
+.btn-success:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+}
+
+.btn-danger {
+    background: linear-gradient(45deg, #f44336, #ff5722);
+    color: white;
+}
+
+.btn-danger:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(244, 67, 54, 0.4);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Center Panel Styles */
+.telemetry-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.telemetry-card {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 1rem;
+    border: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+.telemetry-label {
+    font-size: 0.8rem;
+    color: #b3e5fc;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+}
+
+.telemetry-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.2rem;
+    color: #00d4ff;
+    font-weight: 700;
+}
+
+.telemetry-unit {
+    font-size: 0.9rem;
+    color: #81d4fa;
+    margin-left: 0.25rem;
+}
+
+.charts-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    height: 300px;
+}
+
+.chart-wrapper {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 1rem;
+    border: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+/* Right Panel Styles */
+.performance-metrics {
+    margin-bottom: 1.5rem;
+}
+
+.metric-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+}
+
+.metric-label {
+    font-size: 0.9rem;
+    color: #b3e5fc;
+}
+
+.metric-value {
+    font-family: 'Orbitron', monospace;
+    font-weight: 700;
+    color: #00d4ff;
+}
+
+.emergency-controls {
+    background: rgba(244, 67, 54, 0.1);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.emergency-title {
+    color: #f44336;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+}
+
+/* Status Bar */
+.status-bar {
+    background: rgba(0, 0, 0, 0.5);
+    padding: 0.5rem 2rem;
+    border-top: 1px solid rgba(0, 212, 255, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #4caf50;
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.warning {
+    background: #ffc107;
+}
+
+.status-indicator.error {
+    background: #f44336;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Dialog Styles */
+.dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.dialog {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 12px;
+    border: 2px solid #00d4ff;
+    padding: 2rem;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.dialog-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 1.3rem;
+    color: #00d4ff;
+    margin-bottom: 1rem;
+}
+
+.dialog-message {
+    color: #e3f2fd;
+    margin-bottom: 2rem;
+    line-height: 1.5;
+}
+
+.dialog-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .main-content {
+        grid-template-columns: 250px 1fr 250px;
+    }
+}
+
+@media (max-width: 768px) {
+    .main-content {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+    }
+
+    .header-content {
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .header-info {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .charts-container {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .chart-wrapper {
+        height: 200px;
+    }
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 212, 255, 0.5);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 212, 255, 0.7);
+}
+
+/* Animation Classes */
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.3s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+    transition: all 0.3s ease;
+}
+
+.slide-up-enter-from {
+    transform: translateY(20px);
+    opacity: 0;
+}
+
+.slide-up-leave-to {
+    transform: translateY(-20px);
+    opacity: 0;
+}
