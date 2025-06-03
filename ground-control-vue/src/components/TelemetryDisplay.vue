@@ -54,7 +54,20 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-    telemetryData: Object
+    telemetryData: {
+        type: Object,
+        required: true,
+        default: () => ({
+            altitude: 0,
+            velocity: { x: 0, y: 0, z: 0 },
+            acceleration: { x: 0, y: 0, z: 0 },
+            temperature: { external: 0 },
+            pressure: 0,
+            battery: { percentage: 100 },
+            gps: { lat: 12.9716, lon: 77.5946 },
+            attitude: { pitch: 0, yaw: 0, roll: 0 }
+        })
+    }
 })
 
 const totalVelocity = computed(() => {
@@ -67,4 +80,47 @@ const totalAcceleration = computed(() => {
     return Math.sqrt(a.x ** 2 + a.y ** 2 + a.z ** 2)
 })
 </script>
-  
+
+<style scoped>
+.telemetry-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.telemetry-card {
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.telemetry-card:hover {
+    background: rgba(0, 212, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.telemetry-label {
+    color: #b3e5fc;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+    font-family: 'Orbitron', monospace;
+}
+
+.telemetry-value {
+    color: #00d4ff;
+    font-size: 1.5rem;
+    font-weight: bold;
+    font-family: 'Orbitron', monospace;
+}
+
+.telemetry-unit {
+    font-size: 0.9rem;
+    margin-left: 0.3rem;
+    color: #b3e5fc;
+}
+</style>
