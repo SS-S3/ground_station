@@ -1,39 +1,50 @@
 <template>
-    <div class="chart-wrapper">
+    <div class="chart-component">
         <div class="chart-header">
-            <h3 class="chart-title">{{ title }}</h3>
-            <div class="chart-controls" v-if="showControls">
-                <button @click="toggleAnimation" class="control-btn">
-                    {{ animationEnabled ? 'Pause' : 'Play' }}
-                </button>
+            <h4>{{ title }}</h4>
+            <div class="chart-controls">
                 <button @click="resetZoom" class="control-btn">Reset Zoom</button>
-                <button @click="exportChart" class="control-btn">Export</button>
+                <button @click="togglePause" class="control-btn">
+                    {{ isPaused ? 'Resume' : 'Pause' }}
+                </button>
             </div>
         </div>
+
         <div class="chart-container">
-            <canvas ref="chartCanvas"></canvas>
+            <Line v-if="chartType === 'line'" :id="chartId" :data="chartData" :options="mergedOptions" ref="chartRef" />
+            <Bar v-else-if="chartType === 'bar'" :id="chartId" :data="chartData" :options="mergedOptions"
+                ref="chartRef" />
+            <Doughnut v-else-if="chartType === 'doughnut'" :id="chartId" :data="chartData" :options="mergedOptions"
+                ref="chartRef" />
         </div>
+
         <div class="chart-stats" v-if="showStats">
             <div class="stat-item">
                 <span class="stat-label">Current:</span>
-                <span class="stat-value">{{ currentValue }}</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-label">Max:</span>
-                <span class="stat-value">{{ maxValue }}</span>
+                <span class="stat-value" :style="{ color: currentValueColor }">
+                    {{ formatValue(currentValue) }}
+                </span>
             </div>
             <div class="stat-item">
                 <span class="stat-label">Min:</span>
-                <span class="stat-value">{{ minValue }}</span>
+                <span class="stat-value">{{ formatValue(minValue) }}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Max:</span>
+                <span class="stat-value">{{ formatValue(maxValue) }}</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Avg:</span>
+                <span class="stat-value">{{ formatValue(avgValue) }}</span>
             </div>
         </div>
     </div>
 </template>
 
-<script setup>
-import { ref, onMounted, watch, onUnmounted, computed } from 'vue'
+<script>
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import {
-    Chart,
+    Chart as ChartJS,
     CategoryScale,
     LinearScale,
     PointElement,
@@ -43,13 +54,13 @@ import {
     Tooltip,
     Legend,
     Filler,
-    TimeScale
+    ArcElement
 } from 'chart.js'
-import 'chartjs-adapter-date-fns'
 import zoomPlugin from 'chartjs-plugin-zoom'
+import { Line, Bar, Doughnut } from 'vue-chartjs'
 
 // Register Chart.js components
-Chart.register(
+ChartJS.register(
     CategoryScale,
     LinearScale,
     PointElement,
@@ -59,527 +70,358 @@ Chart.register(
     Tooltip,
     Legend,
     Filler,
-    TimeScale,
+    ArcElement,
     zoomPlugin
 )
 
-const props = defineProps({
-    chartData: {
-        type: Object,
-        required: true
+export default {
+    name: 'ChartComponent',
+    components: {
+        Line,
+        Bar,
+        Doughnut
     },
-    options: {
-        type: Object,
-        default: () => ({})
-    },
-    type: {
-        type: String,
-        default: 'line'
-    },
-    title: {
-        type: String,
-        default: 'Telemetry Chart'
-    },
-    showControls: {
-        type: Boolean,
-        default: true
-    },
-    showStats: {
-        type: Boolean,
-        default: true
-    },
-    realTime: {
-        type: Boolean,
-        default: true
-    },
-    theme: {
-        type: String,
-        default: 'dark' // 'dark' or 'light'
-    }
-})
-
-const chartCanvas = ref(null)
-const animationEnabled = ref(true)
-let chart = null
-
-// Modern chart configuration
-const defaultOptions = computed(() => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    devicePixelRatio: 2, // High DPI support
-
-    // Modern animations
-    animation: {
-        duration: animationEnabled.value ? 750 : 0,
-        easing: 'easeInOutQuart'
-    },
-
-    // Interactive features
-    interaction: {
-        intersect: false,
-        mode: 'index'
-    },
-
-    // Zoom and pan
-    plugins: {
-        zoom: {
-            zoom: {
-                wheel: {
-                    enabled: true,
-                },
-                pinch: {
-                    enabled: true
-                },
-                mode: 'x',
-            },
-            pan: {
-                enabled: true,
-                mode: 'x',
-            }
-        },
-
-        // Custom title
+    props: {
         title: {
-            display: true,
-            text: props.title,
-            color: props.theme === 'dark' ? '#00d4ff' : '#1976d2',
-            font: {
-                family: 'Orbitron',
-                size: 16,
-                weight: 'bold'
-            },
-            padding: 20
+            type: String,
+            required: true
         },
-
-        // Modern legend
-        legend: {
-            display: true,
-            position: 'top',
-            labels: {
-                color: props.theme === 'dark' ? '#e3f2fd' : '#333',
-                font: {
-                    family: 'Roboto',
-                    size: 12
-                },
-                usePointStyle: true,
-                pointStyle: 'circle',
-                padding: 20
-            }
+        data: {
+            type: Object,
+            required: true
         },
-
-        // Enhanced tooltip
-        tooltip: {
-            enabled: true,
-            backgroundColor: props.theme === 'dark' ? 'rgba(0, 0, 0, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-            titleColor: props.theme === 'dark' ? '#00d4ff' : '#1976d2',
-            bodyColor: props.theme === 'dark' ? '#e3f2fd' : '#333',
-            borderColor: props.theme === 'dark' ? '#00d4ff' : '#1976d2',
-            borderWidth: 2,
-            cornerRadius: 8,
-            displayColors: true,
-            titleFont: {
-                family: 'Orbitron',
-                size: 14,
-                weight: 'bold'
-            },
-            bodyFont: {
-                family: 'Roboto',
-                size: 12
-            },
-            callbacks: {
-                title: function (context) {
-                    return `Time: ${context[0].label}`
-                },
-                label: function (context) {
-                    const label = context.dataset.label || ''
-                    const value = context.parsed.y
-                    const unit = getUnit(label)
-                    return `${label}: ${value.toFixed(2)} ${unit}`
-                }
-            }
+        chartType: {
+            type: String,
+            default: 'line',
+            validator: (value) => ['line', 'bar', 'doughnut'].includes(value)
+        },
+        options: {
+            type: Object,
+            default: () => ({})
+        },
+        showStats: {
+            type: Boolean,
+            default: true
+        },
+        unit: {
+            type: String,
+            default: ''
+        },
+        precision: {
+            type: Number,
+            default: 2
+        },
+        thresholds: {
+            type: Object,
+            default: () => ({
+                warning: null,
+                critical: null
+            })
         }
     },
+    setup(props) {
+        const chartRef = ref(null)
+        const isPaused = ref(false)
+        const chartId = `chart-${Math.random().toString(36).substr(2, 9)}`
 
-    // Modern scales
-    scales: {
-        x: {
-            type: props.realTime ? 'time' : 'category',
-            display: true,
-            grid: {
-                color: props.theme === 'dark' ? 'rgba(0, 212, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
-                lineWidth: 1
-            },
-            ticks: {
-                color: props.theme === 'dark' ? '#b3e5fc' : '#666',
-                font: {
-                    family: 'Roboto',
-                    size: 11
-                },
-                maxTicksLimit: 10
-            },
-            title: {
-                display: true,
-                text: 'Time',
-                color: props.theme === 'dark' ? '#00d4ff' : '#1976d2',
-                font: {
-                    family: 'Orbitron',
-                    size: 12,
-                    weight: 'bold'
-                }
-            }
-        },
-        y: {
-            display: true,
-            grid: {
-                color: props.theme === 'dark' ? 'rgba(0, 212, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
-                lineWidth: 1
-            },
-            ticks: {
-                color: props.theme === 'dark' ? '#b3e5fc' : '#666',
-                font: {
-                    family: 'Roboto',
-                    size: 11
-                },
-                callback: function (value) {
-                    return value.toFixed(1)
-                }
-            },
-            title: {
-                display: true,
-                text: getYAxisLabel(),
-                color: props.theme === 'dark' ? '#00d4ff' : '#1976d2',
-                font: {
-                    family: 'Orbitron',
-                    size: 12,
-                    weight: 'bold'
-                }
-            }
-        }
-    }
-}))
-
-// Enhanced chart data with modern styling
-const enhancedChartData = computed(() => {
-    if (!props.chartData || !props.chartData.datasets) return props.chartData
-
-    const enhancedDatasets = props.chartData.datasets.map((dataset, index) => ({
-        ...dataset,
-
-        // Modern line styling
-        borderWidth: 3,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointBackgroundColor: dataset.borderColor,
-        pointBorderColor: '#ffffff',
-        pointBorderWidth: 2,
-        pointHoverBackgroundColor: dataset.borderColor,
-        pointHoverBorderColor: '#ffffff',
-        pointHoverBorderWidth: 3,
-
-        // Smooth curves
-        tension: 0.4,
-
-        // Fill area with gradient
-        fill: dataset.fill !== false,
-        backgroundColor: createGradient(dataset.borderColor),
-
-        // Animation delays for multiple datasets
-        animation: {
-            delay: index * 200
-        }
-    }))
-
-    return {
-        ...props.chartData,
-        datasets: enhancedDatasets
-    }
-})
-
-// Statistics computed properties
-const currentValue = computed(() => {
-    if (!props.chartData.datasets?.[0]?.data?.length) return 'N/A'
-    const data = props.chartData.datasets[0].data
-    const latest = data[data.length - 1]
-    return typeof latest === 'object' ? latest.y?.toFixed(2) : latest?.toFixed(2)
-})
-
-const maxValue = computed(() => {
-    if (!props.chartData.datasets?.[0]?.data?.length) return 'N/A'
-    const data = props.chartData.datasets[0].data
-    const values = data.map(d => typeof d === 'object' ? d.y : d)
-    return Math.max(...values).toFixed(2)
-})
-
-const minValue = computed(() => {
-    if (!props.chartData.datasets?.[0]?.data?.length) return 'N/A'
-    const data = props.chartData.datasets[0].data
-    const values = data.map(d => typeof d === 'object' ? d.y : d)
-    return Math.min(...values).toFixed(2)
-})
-
-// Helper functions
-const createGradient = (color) => {
-    if (!chartCanvas.value) return color
-
-    const ctx = chartCanvas.value.getContext('2d')
-    const gradient = ctx.createLinearGradient(0, 0, 0, 400)
-
-    // Extract RGB from hex color
-    const rgb = hexToRgb(color)
-    if (rgb) {
-        gradient.addColorStop(0, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.3)`)
-        gradient.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.05)`)
-    }
-
-    return gradient
-}
-
-const hexToRgb = (hex) => {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-    return result ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16)
-    } : null
-}
-
-const getUnit = (label) => {
-    const units = {
-        'Altitude': 'm',
-        'Velocity': 'm/s',
-        'Acceleration': 'm/s²',
-        'Temperature': '°C',
-        'Pressure': 'hPa',
-        'Battery': '%',
-        'Signal': 'dBm'
-    }
-
-    for (const [key, unit] of Object.entries(units)) {
-        if (label.toLowerCase().includes(key.toLowerCase())) {
-            return unit
-        }
-    }
-    return ''
-}
-
-const getYAxisLabel = () => {
-    if (!props.chartData.datasets?.[0]?.label) return 'Value'
-    const label = props.chartData.datasets[0].label
-    const unit = getUnit(label)
-    return unit ? `${label} (${unit})` : label
-}
-
-// Chart methods
-const toggleAnimation = () => {
-    animationEnabled.value = !animationEnabled.value
-    if (chart) {
-        chart.options.animation.duration = animationEnabled.value ? 750 : 0
-        chart.update()
-    }
-}
-
-const resetZoom = () => {
-    if (chart) {
-        chart.resetZoom()
-    }
-}
-
-const exportChart = () => {
-    if (chart) {
-        const url = chart.toBase64Image('image/png', 1.0)
-        const link = document.createElement('a')
-        link.download = `${props.title.replace(/\s+/g, '_')}_chart.png`
-        link.href = url
-        link.click()
-    }
-}
-
-// Lifecycle
-onMounted(() => {
-    if (chartCanvas.value) {
-        const ctx = chartCanvas.value.getContext('2d')
-
-        chart = new Chart(ctx, {
-            type: props.type,
-            data: enhancedChartData.value,
-            options: { ...defaultOptions.value, ...props.options }
+        // Computed values for statistics
+        const currentValue = computed(() => {
+            if (!props.data?.datasets?.[0]?.data?.length) return 0
+            const data = props.data.datasets[0].data
+            return data[data.length - 1] || 0
         })
-    }
-})
 
-watch(() => props.chartData, (newData) => {
-    if (chart && newData) {
-        // Update data with smooth animation
-        chart.data = enhancedChartData.value
-        chart.update(animationEnabled.value ? 'active' : 'none')
-    }
-}, { deep: true })
+        const minValue = computed(() => {
+            if (!props.data?.datasets?.[0]?.data?.length) return 0
+            return Math.min(...props.data.datasets[0].data.filter(val => val !== null && val !== undefined))
+        })
 
-watch(() => props.options, (newOptions) => {
-    if (chart && newOptions) {
-        chart.options = { ...defaultOptions.value, ...newOptions }
-        chart.update()
-    }
-}, { deep: true })
+        const maxValue = computed(() => {
+            if (!props.data?.datasets?.[0]?.data?.length) return 0
+            return Math.max(...props.data.datasets[0].data.filter(val => val !== null && val !== undefined))
+        })
 
-onUnmounted(() => {
-    if (chart) {
-        chart.destroy()
+        const avgValue = computed(() => {
+            if (!props.data?.datasets?.[0]?.data?.length) return 0
+            const data = props.data.datasets[0].data.filter(val => val !== null && val !== undefined)
+            return data.reduce((sum, val) => sum + val, 0) / data.length
+        })
+
+        // Color coding based on thresholds
+        const currentValueColor = computed(() => {
+            const value = currentValue.value
+            const { warning, critical } = props.thresholds
+
+            if (critical !== null && value >= critical) return '#f44336'
+            if (warning !== null && value >= warning) return '#ff9800'
+            return '#4caf50'
+        })
+
+        // Merged chart options
+        const mergedOptions = computed(() => {
+            const defaultOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: 'white',
+                        bodyColor: 'white',
+                        borderColor: 'rgba(255, 255, 255, 0.2)',
+                        borderWidth: 1,
+                        cornerRadius: 8,
+                        displayColors: false,
+                        callbacks: {
+                            label: (context) => {
+                                return `${props.title}: ${formatValue(context.parsed.y)}`
+                            }
+                        }
+                    },
+                    zoom: {
+                        pan: {
+                            enabled: true,
+                            mode: 'x'
+                        },
+                        zoom: {
+                            wheel: {
+                                enabled: true
+                            },
+                            pinch: {
+                                enabled: true
+                            },
+                            mode: 'x'
+                        }
+                    }
+                },
+                scales: props.chartType === 'line' ? {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: 'rgba(255, 255, 255, 0.7)',
+                            callback: function (value) {
+                                return formatTime(value)
+                            }
+                        }
+                    },
+                    y: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: 'rgba(255, 255, 255, 0.7)',
+                            callback: function (value) {
+                                return formatValue(value)
+                            }
+                        }
+                    }
+                } : {},
+                elements: {
+                    point: {
+                        radius: 0,
+                        hoverRadius: 4
+                    },
+                    line: {
+                        tension: 0.1,
+                        borderWidth: 2
+                    }
+                },
+                animation: {
+                    duration: isPaused.value ? 0 : 200
+                }
+            }
+
+            return { ...defaultOptions, ...props.options }
+        })
+
+        // Computed chart data with enhancements
+        const chartData = computed(() => {
+            if (!props.data) return { labels: [], datasets: [] }
+
+            return {
+                ...props.data,
+                datasets: props.data.datasets.map(dataset => ({
+                    ...dataset,
+                    fill: true,
+                    backgroundColor: dataset.backgroundColor || 'rgba(66, 165, 245, 0.1)',
+                    borderColor: dataset.borderColor || '#42A5F5',
+                    pointBackgroundColor: dataset.borderColor || '#42A5F5',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 1
+                }))
+            }
+        })
+
+        // Methods
+        const formatValue = (value) => {
+            if (value === null || value === undefined) return '--'
+            return `${Number(value).toFixed(props.precision)}${props.unit}`
+        }
+
+        const formatTime = (seconds) => {
+            const minutes = Math.floor(seconds / 60)
+            const secs = Math.floor(seconds % 60)
+            return `${minutes}:${secs.toString().padStart(2, '0')}`
+        }
+
+        const resetZoom = () => {
+            if (chartRef.value?.chart) {
+                chartRef.value.chart.resetZoom()
+            }
+        }
+
+        const togglePause = () => {
+            isPaused.value = !isPaused.value
+        }
+
+        const updateChart = () => {
+            if (chartRef.value?.chart && !isPaused.value) {
+                chartRef.value.chart.update('none')
+            }
+        }
+
+        // Watch for data changes to update chart
+        watch(() => props.data, () => {
+            nextTick(() => {
+                updateChart()
+            })
+        }, { deep: true })
+
+        onMounted(() => {
+            nextTick(() => {
+                updateChart()
+            })
+        })
+
+        return {
+            chartRef,
+            isPaused,
+            chartId,
+            currentValue,
+            minValue,
+            maxValue,
+            avgValue,
+            currentValueColor,
+            mergedOptions,
+            chartData,
+            formatValue,
+            resetZoom,
+            togglePause
+        }
     }
-})
+}
 </script>
 
 <style scoped>
-.chart-wrapper {
-    background: rgba(0, 0, 0, 0.3);
+.chart-component {
+    background: rgba(255, 255, 255, 0.05);
     border-radius: 12px;
-    border: 1px solid rgba(0, 212, 255, 0.3);
-    padding: 1rem;
+    padding: 16px;
     backdrop-filter: blur(10px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 .chart-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.chart-title {
-    font-family: 'Orbitron', monospace;
-    font-size: 1.1rem;
-    color: #00d4ff;
+.chart-header h4 {
     margin: 0;
-    text-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: white;
 }
 
 .chart-controls {
     display: flex;
-    gap: 0.5rem;
+    gap: 8px;
 }
 
 .control-btn {
-    padding: 0.4rem 0.8rem;
-    background: rgba(0, 212, 255, 0.2);
-    border: 1px solid #00d4ff;
-    border-radius: 6px;
-    color: #00d4ff;
-    cursor: pointer;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
     font-size: 0.8rem;
-    transition: all 0.3s ease;
-    font-family: 'Roboto', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s ease;
 }
 
 .control-btn:hover {
-    background: rgba(0, 212, 255, 0.4);
+    background: rgba(255, 255, 255, 0.2);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
 }
 
 .chart-container {
+    flex: 1;
     position: relative;
-    height: 300px;
-    margin: 1rem 0;
+    min-height: 200px;
 }
 
 .chart-stats {
-    display: flex;
-    justify-content: space-around;
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid rgba(0, 212, 255, 0.2);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .stat-item {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.25rem;
+    gap: 2px;
 }
 
 .stat-label {
-    font-size: 0.8rem;
-    color: #b3e5fc;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.7);
     text-transform: uppercase;
-    font-weight: 500;
+    letter-spacing: 0.5px;
 }
 
 .stat-value {
-    font-family: 'Orbitron', monospace;
-    font-size: 1rem;
-    color: #00d4ff;
-    font-weight: 700;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: white;
 }
 
 /* Responsive design */
 @media (max-width: 768px) {
+    .chart-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+
     .chart-header {
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 8px;
         align-items: stretch;
     }
 
     .chart-controls {
         justify-content: center;
     }
-
-    .chart-stats {
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .stat-item {
-        flex-direction: row;
-        justify-content: space-between;
-    }
-}
-
-/* Animation classes */
-.chart-wrapper {
-    animation: slideIn 0.5s ease-out;
-}
-
-@keyframes slideIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* Loading state */
-.chart-wrapper.loading {
-    position: relative;
-}
-
-.chart-wrapper.loading::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    border-radius: 12px;
-    z-index: 10;
-}
-
-.chart-wrapper.loading::after {
-    content: 'Loading...';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #00d4ff;
-    font-family: 'Orbitron', monospace;
-    z-index: 11;
 }
 </style>
   
