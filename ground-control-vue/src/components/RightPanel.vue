@@ -19,6 +19,14 @@
                 <span class="metric-label">Range</span>
                 <span class="metric-value">{{ performanceMetrics.range.toFixed(0) }} m</span>
             </div>
+            <div class="metric-item">
+                <span class="metric-label">Latitude</span>
+                <span class="metric-value">{{ performanceMetrics.latitude?.toFixed(6) ?? 'N/A' }}°</span>
+            </div>
+            <div class="metric-item">
+                <span class="metric-label">Longitude</span>
+                <span class="metric-value">{{ performanceMetrics.longitude?.toFixed(6) ?? 'N/A' }}°</span>
+            </div>
         </div>
 
         <div class="emergency-controls">
@@ -55,4 +63,4 @@ const formatDuration = (seconds) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 </script>
-  
+

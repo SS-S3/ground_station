@@ -326,7 +326,7 @@ export default {
 .chart-component {
     background: rgba(255, 255, 255, 0.05);
     border-radius: 12px;
-    padding: 16px;
+    padding: 10px;
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     height: 100%;
@@ -347,7 +347,7 @@ export default {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 500;
-    color: white;
+    color: rgb(255, 255, 255);
 }
 
 .chart-controls {
@@ -381,7 +381,7 @@ export default {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 8px;
-    margin-top: 12px;
+    margin-top: 10px;
     padding-top: 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.2);
 }
@@ -395,7 +395,7 @@ export default {
 
 .stat-label {
     font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(238, 255, 0, 0.628);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -407,10 +407,10 @@ export default {
 }
 
 /* Responsive design */
-@media (max-width: 768px) {
+@media (max-width: 600px) {
     .chart-stats {
         grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
+        gap: 10px;
     }
 
     .chart-header {
@@ -424,4 +424,3 @@ export default {
     }
 }
 </style>
-  

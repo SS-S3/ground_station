@@ -54,6 +54,7 @@ import RightPanel from './components/RightPanel.vue'
 import StatusBar from './components/StatusBar.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useSocket } from './composables/useSocket'
+import { checklistService } from './services/checklistService'
 
 // Socket connection
 const { socket, isConnected } = useSocket('http://localhost:3001')
@@ -122,41 +123,141 @@ const flightData = reactive({
 const setupSocketListeners = () => {
   if (!socket.value) return
 
+  // Clean up any existing listeners first
+  socket.value.removeAllListeners()
+
+  socket.value.on('checklist-update', (updatedChecklist) => {
+    // Update the checklist items one by one
+    updatedChecklist.forEach(updatedItem => {
+      const index = prelaunchChecklist.findIndex(item => item.id === updatedItem.id)
+      if (index !== -1) {
+        prelaunchChecklist[index].completed = updatedItem.completed
+      }
+    })
+    
+    // Check arming conditions after update
+    checkArmingConditions()
+  })
+
+  socket.value.on('system-armed', () => {
+    isArmed.value = true
+  })
+
+  socket.value.on('launch-sequence-initiated', () => {
+    if (!isArmed.value) return
+    currentPhase.value = 'Launch Sequence'
+    startLaunchSequence()
+  })
+
   socket.value.on('telemetry-update', (data) => {
     Object.assign(telemetryData, data)
     updateFlightData(data)
     updatePerformanceMetrics(data)
   })
-  
-  socket.value.on('system-health-update', (data) => {
-    Object.assign(systemHealth, data)
-  })
-  
-  socket.value.on('phase-change', (phase) => {
-    currentPhase.value = phase
-  })
-  
-  socket.value.on('mission-start', (startTime) => {
-    missionStartTime.value = startTime
-    isLaunched.value = true
-  })
 }
 
-// Methods
-const toggleChecklistItem = (id) => {
-  const item = prelaunchChecklist.find(item => item.id === id)
-  if (item) {
-    item.completed = !item.completed
+// Add launch sequence handler
+const startLaunchSequence = () => {
+  if (!isArmed.value) return
+  
+  let countdown = 5
+  showDialog.value = true
+  dialogTitle.value = 'Launch Sequence'
+  
+  const countdownInterval = setInterval(() => {
+    if (countdown > 0) {
+      dialogMessage.value = `Launch in ${countdown}...`
+      countdown--
+    } else {
+      clearInterval(countdownInterval)
+      hideDialog()
+      executeLaunch()
+    }
+  }, 1000)
+}
+
+const executeLaunch = () => {
+  if (!isArmed.value) return
+  
+  try {
+    socket.value?.emit('launch-rocket')
+    isLaunched.value = true
+    missionStartTime.value = Date.now()
+    currentPhase.value = 'Powered Ascent'
+    startTelemetrySimulation()
+  } catch (error) {
+    console.error('Launch failed:', error)
+    isLaunched.value = false
+    currentPhase.value = 'Pre-launch'
   }
 }
 
-const armSystem = () => {
-  const allCompleted = prelaunchChecklist.every(item => item.completed)
-  if (allCompleted) {
-    isArmed.value = true
+// Update the toggleChecklistItem method
+const toggleChecklistItem = async (id) => {
+  console.log('App: Toggle checklist item:', id)
+  try {
+    const itemIndex = prelaunchChecklist.findIndex(item => item.id === id)
+    if (itemIndex === -1) {
+      console.error('Item not found:', id)
+      return
+    }
+
+    const currentState = prelaunchChecklist[itemIndex].completed
+    
+    // Optimistically update UI
+    prelaunchChecklist[itemIndex].completed = !currentState
+    
+    // Simulate system check
+    await simulateSystemCheck(id)
+    
+    // Update backend
+    const result = await checklistService.toggleItem(id)
+    console.log('Toggle result:', result)
+    
+    // Update checklist state based on server response
+    prelaunchChecklist[itemIndex].completed = result.completed
+    
+    // Check arming conditions
+    if (prelaunchChecklist.every(item => item.completed)) {
+      console.log('All items completed, checking arm conditions')
+      checkArmingConditions()
+    }
+  } catch (error) {
+    console.error('Checklist toggle failed:', error)
+    // Revert optimistic update on failure
+    const itemIndex = prelaunchChecklist.findIndex(item => item.id === id)
+    if (itemIndex !== -1) {
+      prelaunchChecklist[itemIndex].completed = !prelaunchChecklist[itemIndex].completed
+    }
+  }
+}
+
+// Update the armSystem method
+const armSystem = async () => {
+  console.log('App: Arming system requested')
+  try {
+    if (!prelaunchChecklist.every(item => item.completed)) {
+      console.log('Cannot arm: checklist incomplete')
+      return
+    }
+
     socket.value?.emit('arm-system')
-  } else {
-    showConfirmDialog('Checklist Incomplete', 'Please complete all checklist items before arming the system.', () => {})
+    isArmed.value = true
+    console.log('System armed successfully')
+    
+    showConfirmDialog(
+      'System Armed',
+      'System is armed and ready for launch. Verify launch conditions.',
+      null
+    )
+  } catch (error) {
+    console.error('System arming failed:', error)
+    isArmed.value = false
+    showConfirmDialog(
+      'Arming Failed',
+      'Failed to arm the system. Please try again.',
+      null
+    )
   }
 }
 
@@ -164,12 +265,6 @@ const showLaunchConfirmation = () => {
   if (isArmed.value) {
     showConfirmDialog('Launch Confirmation', 'Are you sure you want to launch the rocket? This action cannot be undone.', launchRocket)
   }
-}
-
-const launchRocket = () => {
-  socket.value?.emit('launch-rocket')
-  isLaunched.value = true
-  missionStartTime.value = Date.now()
 }
 
 const handleEmergencyAction = (action) => {
@@ -184,6 +279,10 @@ const handleEmergencyAction = (action) => {
 }
 
 const showConfirmDialog = (title, message, callback) => {
+  // Clear any existing dialog first
+  hideDialog()
+  
+  // Set new dialog properties
   dialogTitle.value = title
   dialogMessage.value = message
   dialogCallback.value = callback
@@ -191,12 +290,17 @@ const showConfirmDialog = (title, message, callback) => {
 }
 
 const handleDialogConfirm = () => {
-  dialogCallback.value?.()
+  const callback = dialogCallback.value
   hideDialog()
+  if (callback) {
+    setTimeout(callback, 0) // Execute callback after dialog is hidden
+  }
 }
 
 const hideDialog = () => {
   showDialog.value = false
+  dialogTitle.value = ''
+  dialogMessage.value = ''
   dialogCallback.value = null
 }
 
@@ -259,6 +363,18 @@ const updateTimers = () => {
     missionTimer.value = `T+ ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
   } else {
     missionTimer.value = 'T- 00:00:00'
+  }
+}
+
+// Check arming conditions
+const checkArmingConditions = () => {
+  const allCompleted = prelaunchChecklist.every(item => item.completed)
+  if (allCompleted && !isArmed.value) {
+    showConfirmDialog(
+      'System Ready',
+      'All checks complete. Proceed with system arming?',
+      armSystem
+    )
   }
 }
 

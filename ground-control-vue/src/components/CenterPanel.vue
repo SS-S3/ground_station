@@ -43,9 +43,9 @@
             class="telemetry-chart"
           />
           <ChartComponent
-            :title="'Battery Voltage'"
-            :data="batteryData"
-            :options="chartOptions"
+            :title="'Acceleration'"
+            :data="accelerationData"
+            :options="accelerationChartOptions"
             chart-type="line"
             class="telemetry-chart"
           />
@@ -66,10 +66,10 @@
       <div class="mission-status">
         <h3>Mission Status</h3>
         <div class="status-grid">
-          <div class="status-item">
+          <!-- <div class="status-item">
             <label>Flight Phase:</label>
             <span class="value">{{ flightPhase }}</span>
-          </div>
+          </div> -->
           <div class="status-item">
             <label>Mission Time:</label>
             <span class="value">{{ formatTime(missionTime) }}</span>
@@ -168,6 +168,33 @@ export default {
       }] 
     })
     
+    const accelerationData = ref({
+      labels: [],
+      datasets: [
+        {
+          label: 'X-Axis',
+          data: [],
+          borderColor: '#EF5350',
+          backgroundColor: 'rgba(239, 83, 80, 0.1)',
+          tension: 0.4
+        },
+        {
+          label: 'Y-Axis',
+          data: [],
+          borderColor: '#42A5F5',
+          backgroundColor: 'rgba(66, 165, 245, 0.1)',
+          tension: 0.4
+        },
+        {
+          label: 'Z-Axis',
+          data: [],
+          borderColor: '#66BB6A',
+          backgroundColor: 'rgba(102, 187, 106, 0.1)',
+          tension: 0.4
+        }
+      ]
+    })
+    
     // Trajectory points for 3D visualization
     const trajectoryPoints = ref([])
 
@@ -192,6 +219,41 @@ export default {
       elements: {
         point: {
           radius: 0
+        }
+      }
+    }
+
+    // Acceleration chart options (increased sensitivity)
+    const accelerationChartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          type: 'linear',
+          position: 'bottom',
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)'
+          }
+        },
+        y: {
+          beginAtZero: true,
+          suggestedMin: -20,
+          suggestedMax: 20,
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)'
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            color: 'rgba(255, 255, 255, 0.8)',
+            font: {
+              size: 10
+            }
+          }
         }
       }
     }
@@ -248,12 +310,16 @@ export default {
       const timestamp = elapsedSeconds
       const temperature = 20 + Math.random() * 40 - 20 // -20 to 40°C
       const battery = Math.max(10, 12.6 - elapsedSeconds * 0.01) // Decreasing battery
+      const accX = Math.sin(elapsedSeconds * 0.5) * 5 + (Math.random() * 2 - 1)
+      const accY = Math.cos(elapsedSeconds * 0.3) * 3 + (Math.random() * 2 - 1)
+      const accZ = Math.sin(elapsedSeconds * 0.8) * 8 + (Math.random() * 2 - 1)
 
       // Update chart data (keep last 100 points)
       updateChartData(altitudeData, timestamp, testAltitude)
       updateChartData(velocityData, timestamp, testVelocity)
       updateChartData(temperatureData, timestamp, temperature)
       updateChartData(batteryData, timestamp, battery)
+      updateAccelerationData(timestamp, accX, accY, accZ)
 
       // Update trajectory
       trajectoryPoints.value.push({
@@ -276,6 +342,19 @@ export default {
       if (chartData.value.labels.length > maxPoints) {
         chartData.value.labels.shift()
         chartData.value.datasets[0].data.shift()
+      }
+    }
+
+    const updateAccelerationData = (timestamp, x, y, z) => {
+      const maxPoints = 100
+      accelerationData.value.labels.push(timestamp)
+      accelerationData.value.datasets[0].data.push(x)
+      accelerationData.value.datasets[1].data.push(y)
+      accelerationData.value.datasets[2].data.push(z)
+
+      if (accelerationData.value.labels.length > maxPoints) {
+        accelerationData.value.labels.shift()
+        accelerationData.value.datasets.forEach(dataset => dataset.data.shift())
       }
     }
 
@@ -368,8 +447,10 @@ export default {
       velocityData,
       temperatureData,
       batteryData,
+      accelerationData,
       trajectoryPoints,
       chartOptions,
+      accelerationChartOptions,
       toggleTestMode,
       formatTime
     }
@@ -382,44 +463,71 @@ export default {
   padding: 20px;
   background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
   color: white;
-  min-height: 100vh;
+  min-height: 90vh;
+  border-radius: 12px;
+
 }
 
 .telemetry-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding: 15px;
+  margin-bottom: 12px;
+  padding: 10px;
   background: rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   backdrop-filter: blur(10px);
 }
 
-.telemetry-header h2 {
-  margin: 0;
-  font-size: 1.8rem;
-  font-weight: 300;
+.telemetry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  /* Reduced margin */
+  padding: 8px;
+  /* Reduced padding */
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  min-height: 60px;
+  /* Fixed height */
 }
 
 .status-indicators {
-  display: flex;
+  display: inline-block;
   align-items: center;
-  gap: 20px;
+  flex-direction: row;
+  justify-content: center;
+  border-radius: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(5px);
+  display: flex;
+  flex-direction: row;
+  background: rgba(255, 255, 255, 0.05);
+  gap: 30px;
 }
 
 .status-indicator {
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex: 1 0 auto;
+  min-width: 150px;
+  height: 40px;
+;
+  justify-content:center;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px 15px 5px 8px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.1);
-  transition: all 0.3s ease;
+  transition: all 0.1s ease;
 }
 
 .status-indicator.active {
-  background: rgba(76, 175, 80, 0.3);
+  background: rgba(100, 249, 105, 0.721);
 }
 
 .indicator-dot {
@@ -433,49 +541,79 @@ export default {
 .status-indicator.active .indicator-dot {
   background: #4caf50;
   animation: pulse 2s infinite;
+  padding-bottom: 10px;
 }
 
 @keyframes pulse {
   0% { opacity: 1; }
-  50% { opacity: 0.5; }
+  50% { opacity: 0.3; }
   100% { opacity: 1; }
 }
 
 .test-mode-toggle label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  padding-top: 8px;
   cursor: pointer;
 }
 
 .telemetry-grid {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  grid-template-rows: 1fr auto;
-  gap: 20px;
+  grid-template-rows: 60vh 20vh;
+  /* Fixed heights instead of 1fr auto */
+  gap: 30px;
   height: calc(100vh - 140px);
-}
-
-.telemetry-section {
-  grid-column: 1;
-  grid-row: 1;
+  overflow: hidden;
+  /* Prevent any overflow */
 }
 
 .trajectory-section {
   grid-column: 2;
   grid-row: 1;
+  height: 100%;
+  max-height: 65vh;
+  /* Constrain 3D trajectory height */
+}
+
+.trajectory-section {
+  grid-column: 2;
+  grid-row: 1;
+  height: 600px;
+  /* Match chart height */
 }
 
 .mission-status {
   grid-column: 1 / -1;
   grid-row: 2;
+  max-height: 18vh;
+  /* Fixed maximum height */
+  overflow-y: auto;
+  /* Allow internal scrolling if needed */
+  min-height: 150px;
+  /* Ensure minimum usability */
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  /* Smaller min-width */
+  gap: 8px;
+  /* Reduced gap */
+  padding: 15px;
+  /* Reduced padding */
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .telemetry-section h3,
 .trajectory-section h3,
 .mission-status h3 {
   margin: 0 0 15px 0;
-  font-size: 1.3rem;
+  font-size: 1.2rem;
   font-weight: 300;
   border-bottom: 2px solid rgba(255, 255, 255, 0.3);
   padding-bottom: 10px;
@@ -484,22 +622,27 @@ export default {
 .charts-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 15px;
+  gap: 12px;
   height: calc(100% - 50px);
+  max-height: 50vh;
+  /* Constrain chart height */
 }
 
 .telemetry-chart {
   background: rgba(255, 255, 255, 0.05);
   border-radius: 10px;
-  padding: 15px;
+  padding: 10px;
   backdrop-filter: blur(5px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 15px;
+  gap: 10px;
   padding: 20px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 10px;
