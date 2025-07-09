@@ -506,7 +506,10 @@ const toggleTestMode = () => {
 
 // Watch for telemetryData prop changes
 watch(() => props.telemetryData, (telemetry) => {
-  updateFromTelemetry(telemetry)
+  if (telemetry) {
+    telemetryConnected.value = true
+    updateFromTelemetry(telemetry)
+  }
 }, { immediate: true, deep: true })
 
 // Watch testMode to start/stop mock data
@@ -559,6 +562,11 @@ watch(() => props.testMode, (val) => {
 // Lifecycle
 onMounted(() => {
   console.log('Component mounted')
+  // Set initial telemetry connection if data is available
+  if (props.telemetryData) {
+    telemetryConnected.value = true
+    updateFromTelemetry(props.telemetryData)
+  }
 })
 
 onUnmounted(() => {

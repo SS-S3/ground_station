@@ -74,7 +74,7 @@ const showDialog = ref(false)
 const dialogTitle = ref('')
 const dialogMessage = ref('')
 const dialogCallback = ref(null)
-const testMode = ref(false) // Test mode is OFF by default
+const testMode = ref(true) // Test mode is ON by default for debugging
 
 const telemetryData = reactive({
   altitude: 0,
@@ -767,6 +767,9 @@ const startTelemetrySimulation = () => {
   simulationStartTime = Date.now()
   simulationPhase = 'pre-launch'
   
+  // Start immediately instead of waiting for timer
+  updateTelemetrySimulation(0)
+  
   telemetryInterval = setInterval(() => {
     const elapsedSeconds = (Date.now() - simulationStartTime) / 1000
     updateTelemetrySimulation(elapsedSeconds)
@@ -777,21 +780,21 @@ const updateTelemetrySimulation = (elapsedSeconds) => {
   let altitude, velocity, accX, accY, accZ, temperature, pressure, battery, phase
   
   // Realistic rocket flight simulation
-  if (elapsedSeconds < 3) {
-    // Pre-Launch
+  if (elapsedSeconds < 1) {
+    // Pre-Launch - but with some minor variations for charts
     phase = 'Pre-Launch'
-    altitude = 0
-    velocity = 0
-    accX = (Math.random() - 0.5) * 0.1
-    accY = (Math.random() - 0.5) * 0.1
-    accZ = 9.81 + (Math.random() - 0.5) * 0.1
-    temperature = 25 + (Math.random() - 0.5) * 2
-    pressure = 1013.25
-    battery = 12.6
-  } else if (elapsedSeconds < 18) {
+    altitude = 0 + Math.random() * 0.5
+    velocity = 0 + Math.random() * 0.1
+    accX = (Math.random() - 0.5) * 0.2
+    accY = (Math.random() - 0.5) * 0.2
+    accZ = 9.81 + (Math.random() - 0.5) * 0.2
+    temperature = 25 + (Math.random() - 0.5) * 4
+    pressure = 1013.25 + (Math.random() - 0.5) * 5
+    battery = 12.6 + (Math.random() - 0.5) * 0.1
+  } else if (elapsedSeconds < 16) {
     // Powered Ascent (15 seconds of thrust)
     phase = 'Powered Ascent'
-    const burnTime = elapsedSeconds - 3
+    const burnTime = elapsedSeconds - 1
     const thrustAccel = 22 // m/s² net acceleration
     velocity = thrustAccel * burnTime
     altitude = 0.5 * thrustAccel * burnTime * burnTime
@@ -801,11 +804,11 @@ const updateTelemetrySimulation = (elapsedSeconds) => {
     temperature = 25 + burnTime * 8 + (Math.random() - 0.5) * 5
     pressure = 1013.25 * Math.exp(-altitude / 8000)
     battery = 12.6 - burnTime * 0.05
-    simulationData.burnStartTime = 3
+    simulationData.burnStartTime = 1
   } else if (elapsedSeconds < 35) {
     // Coast Phase
     phase = 'Coast'
-    const coastTime = elapsedSeconds - 18
+    const coastTime = elapsedSeconds - 16
     const burnoutVelocity = 22 * 15
     velocity = Math.max(0, burnoutVelocity - 9.81 * coastTime)
     altitude = simulationData.altitude + burnoutVelocity * coastTime - 0.5 * 9.81 * coastTime * coastTime
