@@ -1,7 +1,13 @@
 <template>
     <div class="trajectory-3d">
         <div class="trajectory-header">
-            <h4>3D Flight Trajectory</h4>
+            <div class="trajectory-title">
+                <h4>3D Flight Trajectory</h4>
+                <div v-if="isShowingTrajectory" class="recording-indicator">
+                    <span class="recording-dot"></span>
+                    Recording
+                </div>
+            </div>
             <div class="trajectory-controls">
                 <button @click="resetCamera" class="control-btn">Reset View</button>
                 <button @click="toggleAnimation" class="control-btn">
@@ -54,6 +60,10 @@ export default {
         flightPhase: {
             type: String,
             default: 'Pre-Launch'
+        },
+        isActive: {
+            type: Boolean,
+            default: false
         }
     },
     setup(props) {
@@ -62,8 +72,11 @@ export default {
 
         // Three.js objects
         let scene, camera, renderer, controls
-        let trajectoryLine, vehicleMesh, groundPlane
+        let trajectoryLine, trajectoryMarkers, vehicleMesh, groundPlane
         let animationFrameId
+        
+        // Marker parameters
+        const markerInterval = 10 // Add a marker every 10 points
 
         // Trajectory data
         const trajectoryGeometry = ref(null)
@@ -160,14 +173,24 @@ export default {
             vehicleMesh.castShadow = true
             scene.add(vehicleMesh)
 
-            // Trajectory line
+            // Trajectory line (dotted)
             trajectoryGeometry.value = new THREE.BufferGeometry()
-            trajectoryMaterial.value = new THREE.LineBasicMaterial({
+            trajectoryMaterial.value = new THREE.LineDashedMaterial({
                 color: 0x42a5f5,
-                linewidth: 2
+                linewidth: 2,
+                dashSize: 5,
+                gapSize: 3
             })
             trajectoryLine = new THREE.Line(trajectoryGeometry.value, trajectoryMaterial.value)
             scene.add(trajectoryLine)
+
+            // Trajectory markers (spheres)
+            const markerGeometry = new THREE.SphereGeometry(1, 8, 6)
+            const markerMaterial = new THREE.MeshBasicMaterial({ color: 0x42a5f5 })
+            
+            // Create marker group
+            trajectoryMarkers = new THREE.Group()
+            scene.add(trajectoryMarkers)
 
             // Controls (simple orbit controls implementation)
             setupControls()
@@ -226,7 +249,13 @@ export default {
         }
 
         const updateTrajectory = () => {
+            // Only update trajectory if active or if in allowed flight phases
             if (!trajectoryGeometry.value || !props.trajectoryPoints.length) return
+            
+            // Clear existing markers
+            while (trajectoryMarkers.children.length > 0) {
+                trajectoryMarkers.remove(trajectoryMarkers.children[0])
+            }
 
             const points = props.trajectoryPoints.map(point =>
                 new THREE.Vector3(point.x, point.z, point.y)
@@ -234,6 +263,11 @@ export default {
 
             trajectoryGeometry.value.setFromPoints(points)
             trajectoryGeometry.value.computeBoundingBox()
+            
+            // Create dashed line
+            if (trajectoryLine) {
+                trajectoryGeometry.value.computeLineDistances()
+            }
 
             // Update trajectory color based on altitude
             const colors = []
@@ -245,6 +279,15 @@ export default {
                 const color = new THREE.Color()
                 color.setHSL(0.6 - normalizedAltitude * 0.6, 1, 0.5)
                 colors.push(color.r, color.g, color.b)
+                
+                // Add markers at intervals
+                if (index % markerInterval === 0 && index > 0) {
+                    const markerGeometry = new THREE.SphereGeometry(0.8, 8, 6)
+                    const markerMaterial = new THREE.MeshBasicMaterial({ color: 0x42a5f5 })
+                    const marker = new THREE.Mesh(markerGeometry, markerMaterial)
+                    marker.position.copy(point)
+                    trajectoryMarkers.add(marker)
+                }
             })
 
             if (colors.length > 0) {
@@ -283,9 +326,17 @@ export default {
                 animationFrameId = requestAnimationFrame(animate)
                 return
             }
-
-            updateTrajectory()
+            
+            // Only update trajectory when appropriate - in active flight phases
+            const isFlightActive = props.flightPhase !== 'Pre-Launch' && props.flightPhase !== 'Landed'
+            
+            // Always update vehicle but only update trajectory when active
             updateVehicle()
+            
+            // Only update trajectory if test data is active or a real launch is happening
+            if (props.isActive || isFlightActive) {
+                updateTrajectory()
+            }
 
             renderer.render(scene, camera)
             animationFrameId = requestAnimationFrame(animate)
@@ -316,6 +367,11 @@ export default {
             if (trajectoryGeometry.value) {
                 trajectoryGeometry.value.setFromPoints([])
             }
+            
+            // Clear markers
+            while (trajectoryMarkers && trajectoryMarkers.children.length > 0) {
+                trajectoryMarkers.remove(trajectoryMarkers.children[0])
+            }
         }
 
         const formatPosition = (position) => {
@@ -325,6 +381,22 @@ export default {
         // Watch for changes
         watch(() => props.trajectoryPoints, updateTrajectory, { deep: true })
         watch(() => props.currentPosition, updateVehicle, { deep: true })
+
+        // Watch for isActive changes to clear trajectory when becoming active
+        watch(() => props.isActive, (newValue, oldValue) => {
+            if (newValue && !oldValue) {
+                // If becoming active, clear trajectory to start fresh
+                clearTrajectory()
+            }
+        })
+
+        // Watch flight phase changes to clear trajectory when returning to pre-launch
+        watch(() => props.flightPhase, (newPhase, oldPhase) => {
+            if (newPhase === 'Pre-Launch' && oldPhase !== 'Pre-Launch') {
+                // If returning to pre-launch, clear trajectory
+                clearTrajectory()
+            }
+        })
 
         onMounted(() => {
             nextTick(() => {
@@ -342,6 +414,11 @@ export default {
             window.removeEventListener('resize', handleResize)
         })
 
+        // Computed value to track if the trajectory is actively showing data
+        const isShowingTrajectory = computed(() => {
+            return props.isActive || (props.flightPhase !== 'Pre-Launch' && props.flightPhase !== 'Landed')
+        })
+        
         return {
             containerRef,
             animationEnabled,
@@ -352,7 +429,8 @@ export default {
             resetCamera,
             toggleAnimation,
             clearTrajectory,
-            formatPosition
+            formatPosition,
+            isShowingTrajectory
         }
     }
 }
@@ -360,7 +438,7 @@ export default {
 
 <style scoped>
 .trajectory-3d {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(176, 169, 169, 0);
     border-radius: 12px;
     padding: 16px;
     backdrop-filter: blur(10px);
@@ -379,11 +457,42 @@ export default {
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+.trajectory-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .trajectory-header h4 {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 500;
     color: white;
+}
+
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    background: rgba(255, 0, 0, 0.15);
+    color: #ff5252;
+    border-radius: 10px;
+    animation: pulse 1.5s infinite;
+}
+
+.recording-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: #ff5252;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
 }
 
 .trajectory-controls {

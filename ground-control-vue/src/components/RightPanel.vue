@@ -32,27 +32,27 @@
         <div class="emergency-controls">
             <div class="emergency-title">Emergency Controls</div>
             <div class="control-buttons">
-                <!-- <button class="btn btn-danger" @click="$emit('emergency-action', 'emergency-stop')">
+                <button class="btn btn-danger" @click="$emit('emergency-action', 'emergency-stop')">
                     Emergency Stop
-                </button> -->
+                </button>
                 <button class="btn btn-danger" @click="$emit('emergency-action', 'flight-termination')">
                     Flight Termination
                 </button>
                 <button class="btn btn-primary" @click="$emit('emergency-action', 'deploy-recovery')">
                     Deploy Recovery
                 </button>
-                <!-- <button class="btn btn-primary" @click="$emit('emergency-action', 'return-to-launch')">
-                    Return to Launch
-                </button> -->
+                
             </div>
+            
         </div>
-    </div>
+        <img src="../assets/rocketry.svg" alt="LOGO" width="250" height="250" class="logo" style="display: block; margin-top:200px;">        </div>
 </template>
 
 <script setup>
 defineProps({
     telemetryData: Object,
-    performanceMetrics: Object
+    performanceMetrics: Object,
+    testMode: Boolean
 })
 
 defineEmits(['emergency-action'])

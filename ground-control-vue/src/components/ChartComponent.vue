@@ -42,7 +42,7 @@
 </template>
 
 <script>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, onUnmounted } from 'vue'
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -117,12 +117,74 @@ export default {
                 warning: null,
                 critical: null
             })
+        },
+        randomData: {
+            type: Boolean,
+            default: false
         }
     },
     setup(props) {
         const chartRef = ref(null)
         const isPaused = ref(false)
         const chartId = `chart-${Math.random().toString(36).substr(2, 9)}`
+
+        // Random data state
+        const randomChartData = ref({ labels: [], datasets: [] })
+        let randomInterval = null
+
+        function generateRandomPoint() {
+            // For line/bar: 1 dataset, for acceleration: 3 datasets
+            const now = Date.now() / 1000
+            if (props.title.toLowerCase().includes('acceleration')) {
+                if (randomChartData.value.labels.length > 100) {
+                    randomChartData.value.labels.shift()
+                    randomChartData.value.datasets.forEach(ds => ds.data.shift())
+                }
+                randomChartData.value.labels.push(now)
+                randomChartData.value.datasets[0].data.push((Math.random() - 0.5) * 20)
+                randomChartData.value.datasets[1].data.push((Math.random() - 0.5) * 20)
+                randomChartData.value.datasets[2].data.push((Math.random() - 0.5) * 20)
+            } else {
+                if (randomChartData.value.labels.length > 100) {
+                    randomChartData.value.labels.shift()
+                    randomChartData.value.datasets[0].data.shift()
+                }
+                randomChartData.value.labels.push(now)
+                randomChartData.value.datasets[0].data.push(Math.random() * 100)
+            }
+        }
+
+        watch(() => props.randomData, (val) => {
+            if (val) {
+                // Initialize random data
+                if (props.title.toLowerCase().includes('acceleration')) {
+                    randomChartData.value = {
+                        labels: [],
+                        datasets: [
+                            { label: 'X-Axis (m/s²)', data: [], borderColor: '#EF5350' },
+                            { label: 'Y-Axis (m/s²)', data: [], borderColor: '#42A5F5' },
+                            { label: 'Z-Axis (m/s²)', data: [], borderColor: '#66BB6A' }
+                        ]
+                    }
+                } else {
+                    randomChartData.value = {
+                        labels: [],
+                        datasets: [
+                            { label: props.title, data: [], borderColor: '#42A5F5' }
+                        ]
+                    }
+                }
+                randomInterval = setInterval(generateRandomPoint, 300)
+            } else {
+                if (randomInterval) clearInterval(randomInterval)
+                randomInterval = null
+                randomChartData.value = { labels: [], datasets: [] }
+            }
+        }, { immediate: true })
+
+        onUnmounted(() => {
+            if (randomInterval) clearInterval(randomInterval)
+        })
 
         // Computed values for statistics
         const currentValue = computed(() => {
@@ -246,6 +308,7 @@ export default {
 
         // Computed chart data with enhancements
         const chartData = computed(() => {
+            if (props.randomData) return randomChartData.value
             if (!props.data) return { labels: [], datasets: [] }
 
             return {

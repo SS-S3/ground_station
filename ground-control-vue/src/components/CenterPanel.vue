@@ -9,7 +9,7 @@
         </div>
         <div class="test-mode-toggle">
           <label>
-            <input type="checkbox" v-model="useTestData" @change="toggleTestMode">
+            <input type="checkbox" :checked="testMode" @change="toggleTestMode">
             Test Mode
           </label>
         </div>
@@ -43,6 +43,20 @@
             class="telemetry-chart"
           />
           <ChartComponent
+            :title="'Battery Voltage'"
+            :data="batteryData"
+            :options="chartOptions"
+            chart-type="line"
+            class="telemetry-chart"
+          />
+          <ChartComponent
+            :title="'Pressure'"
+            :data="pressureData"
+            :options="chartOptions"
+            chart-type="line"
+            class="telemetry-chart"
+          />
+          <ChartComponent
             :title="'Acceleration'"
             :data="accelerationData"
             :options="accelerationChartOptions"
@@ -59,6 +73,7 @@
           :trajectory-points="trajectoryPoints"
           :current-position="currentPosition"
           :flight-phase="flightPhase"
+          :is-active="telemetryConnected && (flightPhase !== 'Pre-Launch' && flightPhase !== 'Landed')"
         />
       </div>
 
@@ -66,10 +81,6 @@
       <div class="mission-status">
         <h3>Mission Status</h3>
         <div class="status-grid">
-          <!-- <div class="status-item">
-            <label>Flight Phase:</label>
-            <span class="value">{{ flightPhase }}</span>
-          </div> -->
           <div class="status-item">
             <label>Mission Time:</label>
             <span class="value">{{ formatTime(missionTime) }}</span>
@@ -90,393 +101,492 @@
             <label>Range:</label>
             <span class="value">{{ currentRange.toFixed(1) }}m</span>
           </div>
+          <div class="status-item">
+            <label>Flight Phase:</label>
+            <span class="value">{{ flightPhase }}</span>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+<script setup>
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import ChartComponent from './ChartComponent.vue'
 import Trajectory3D from './Trajectory3D.vue'
-// import { socket } from '../socket.js' // Uncomment when socket.js is available
 
-export default {
-  name: 'CenterPanel',
-  components: {
-    ChartComponent,
-    Trajectory3D
-  },
-  setup() {
-    // Reactive data
-    const telemetryConnected = ref(false)
-    const useTestData = ref(true) // Start with test data for development
-    const missionTime = ref(0)
-    const flightPhase = ref('Pre-Launch')
-    const maxAltitude = ref(0)
-    const currentVelocity = ref(0)
-    const currentRange = ref(0)
+const props = defineProps({
+  telemetryData: Object,
+  flightData: Object,
+  isLaunched: Boolean,
+  currentPhase: String,
+  testMode: Boolean
+})
+const emit = defineEmits(['update:testMode'])
 
-    // Current position
-    const currentPosition = reactive({
-      x: 0,
-      y: 0,
-      altitude: 0,
-      latitude: 0,
-      longitude: 0
-    })
+// Mock Data Service (inline to avoid import issues)
+class MockDataService {
+  constructor() {
+    this.isRunning = false
+    this.listeners = []
+    this.startTime = Date.now()
+    this.flightPhase = 'Pre-Launch'
+    this.altitude = 0
+    this.velocity = { x: 0, y: 0, z: 0 }
+    this.position = { x: 0, y: 0, altitude: 0 }
+    this.missionTime = 0
+    this.intervalId = null
+  }
 
-    // Chart data arrays
-    const altitudeData = ref({ 
-      labels: [], 
-      datasets: [{ 
-        label: 'Altitude (m)', 
-        data: [], 
-        borderColor: '#42A5F5', 
-        backgroundColor: 'rgba(66, 165, 245, 0.1)' 
-      }] 
-    })
-    
-    const velocityData = ref({ 
-      labels: [], 
-      datasets: [{ 
-        label: 'Velocity (m/s)', 
-        data: [], 
-        borderColor: '#66BB6A', 
-        backgroundColor: 'rgba(102, 187, 106, 0.1)' 
-      }] 
-    })
-    
-    const temperatureData = ref({ 
-      labels: [], 
-      datasets: [{ 
-        label: 'Temperature (°C)', 
-        data: [], 
-        borderColor: '#FFA726', 
-        backgroundColor: 'rgba(255, 167, 38, 0.1)' 
-      }] 
-    })
-    
-    const batteryData = ref({ 
-      labels: [], 
-      datasets: [{ 
-        label: 'Battery (V)', 
-        data: [], 
-        borderColor: '#EF5350', 
-        backgroundColor: 'rgba(239, 83, 80, 0.1)' 
-      }] 
-    })
-    
-    const accelerationData = ref({
-      labels: [],
-      datasets: [
-        {
-          label: 'X-Axis',
-          data: [],
-          borderColor: '#EF5350',
-          backgroundColor: 'rgba(239, 83, 80, 0.1)',
-          tension: 0.4
-        },
-        {
-          label: 'Y-Axis',
-          data: [],
-          borderColor: '#42A5F5',
-          backgroundColor: 'rgba(66, 165, 245, 0.1)',
-          tension: 0.4
-        },
-        {
-          label: 'Z-Axis',
-          data: [],
-          borderColor: '#66BB6A',
-          backgroundColor: 'rgba(102, 187, 106, 0.1)',
-          tension: 0.4
-        }
-      ]
-    })
-    
-    // Trajectory points for 3D visualization
-    const trajectoryPoints = ref([])
+  start() {
+    if (this.isRunning) return
+    this.isRunning = true
+    this.startTime = Date.now()
+    this.altitude = 0
+    this.missionTime = 0
+    this.generateData()
+  }
 
-    // Chart options
-    const chartOptions = {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: {
-          type: 'linear',
-          position: 'bottom'
-        },
-        y: {
-          beginAtZero: false
-        }
-      },
-      plugins: {
-        legend: {
-          display: false
-        }
-      },
-      elements: {
-        point: {
-          radius: 0
-        }
-      }
-    }
-
-    // Acceleration chart options (increased sensitivity)
-    const accelerationChartOptions = {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: {
-          type: 'linear',
-          position: 'bottom',
-          grid: {
-            color: 'rgba(255, 255, 255, 0.1)'
-          }
-        },
-        y: {
-          beginAtZero: true,
-          suggestedMin: -20,
-          suggestedMax: 20,
-          grid: {
-            color: 'rgba(255, 255, 255, 0.1)'
-          }
-        }
-      },
-      plugins: {
-        legend: {
-          display: true,
-          position: 'top',
-          labels: {
-            color: 'rgba(255, 255, 255, 0.8)',
-            font: {
-              size: 10
-            }
-          }
-        }
-      }
-    }
-
-    // Test data generation variables
-    let testDataInterval = null
-    let testMissionStart = Date.now()
-    let testAltitude = 0
-    let testVelocity = 0
-
-    const generateTestData = () => {
-      const now = Date.now()
-      const elapsedSeconds = (now - testMissionStart) / 1000
-      
-      // Update mission time
-      missionTime.value = elapsedSeconds
-
-      // Simulate flight phases
-      if (elapsedSeconds < 10) {
-        flightPhase.value = 'Pre-Launch'
-        testAltitude = 0
-        testVelocity = 0
-      } else if (elapsedSeconds < 60) {
-        flightPhase.value = 'Powered Ascent'
-        testAltitude += Math.random() * 50 + 30
-        testVelocity = Math.random() * 20 + 80
-      } else if (elapsedSeconds < 120) {
-        flightPhase.value = 'Coast'
-        testAltitude += Math.random() * 10 + 5
-        testVelocity = Math.max(0, testVelocity - Math.random() * 5)
-      } else if (elapsedSeconds < 200) {
-        flightPhase.value = 'Descent'
-        testAltitude = Math.max(0, testAltitude - Math.random() * 20 - 10)
-        testVelocity = Math.random() * 30 + 20
-      } else {
-        flightPhase.value = 'Recovery'
-        testAltitude = Math.max(0, testAltitude - Math.random() * 5)
-        testVelocity = Math.max(0, testVelocity - Math.random() * 2)
-      }
-
-      // Update max altitude
-      if (testAltitude > maxAltitude.value) {
-        maxAltitude.value = testAltitude
-      }
-
-      // Update current values
-      currentPosition.altitude = testAltitude
-      currentPosition.x = Math.sin(elapsedSeconds * 0.1) * 100
-      currentPosition.y = Math.cos(elapsedSeconds * 0.1) * 100
-      currentVelocity.value = testVelocity
-      currentRange.value = Math.sqrt(currentPosition.x * currentPosition.x + currentPosition.y * currentPosition.y)
-
-      // Generate telemetry data
-      const timestamp = elapsedSeconds
-      const temperature = 20 + Math.random() * 40 - 20 // -20 to 40°C
-      const battery = Math.max(10, 12.6 - elapsedSeconds * 0.01) // Decreasing battery
-      const accX = Math.sin(elapsedSeconds * 0.5) * 5 + (Math.random() * 2 - 1)
-      const accY = Math.cos(elapsedSeconds * 0.3) * 3 + (Math.random() * 2 - 1)
-      const accZ = Math.sin(elapsedSeconds * 0.8) * 8 + (Math.random() * 2 - 1)
-
-      // Update chart data (keep last 100 points)
-      updateChartData(altitudeData, timestamp, testAltitude)
-      updateChartData(velocityData, timestamp, testVelocity)
-      updateChartData(temperatureData, timestamp, temperature)
-      updateChartData(batteryData, timestamp, battery)
-      updateAccelerationData(timestamp, accX, accY, accZ)
-
-      // Update trajectory
-      trajectoryPoints.value.push({
-        x: currentPosition.x,
-        y: currentPosition.y,
-        z: testAltitude
-      })
-
-      // Limit trajectory points
-      if (trajectoryPoints.value.length > 1000) {
-        trajectoryPoints.value.shift()
-      }
-    }
-
-    const updateChartData = (chartData, timestamp, value) => {
-      const maxPoints = 100
-      chartData.value.labels.push(timestamp)
-      chartData.value.datasets[0].data.push(value)
-      
-      if (chartData.value.labels.length > maxPoints) {
-        chartData.value.labels.shift()
-        chartData.value.datasets[0].data.shift()
-      }
-    }
-
-    const updateAccelerationData = (timestamp, x, y, z) => {
-      const maxPoints = 100
-      accelerationData.value.labels.push(timestamp)
-      accelerationData.value.datasets[0].data.push(x)
-      accelerationData.value.datasets[1].data.push(y)
-      accelerationData.value.datasets[2].data.push(z)
-
-      if (accelerationData.value.labels.length > maxPoints) {
-        accelerationData.value.labels.shift()
-        accelerationData.value.datasets.forEach(dataset => dataset.data.shift())
-      }
-    }
-
-    const toggleTestMode = () => {
-      if (useTestData.value) {
-        startTestData()
-      } else {
-        stopTestData()
-        // Connect to real telemetry
-        connectToTelemetry()
-      }
-    }
-
-    const startTestData = () => {
-      testMissionStart = Date.now()
-      testDataInterval = setInterval(generateTestData, 100) // Update every 100ms
-      telemetryConnected.value = true
-    }
-
-    const stopTestData = () => {
-      if (testDataInterval) {
-        clearInterval(testDataInterval)
-        testDataInterval = null
-      }
-    }
-
-    const connectToTelemetry = () => {
-      // Real telemetry connection logic
-      // Uncomment when socket.js is available
-      /*
-      socket.on('telemetry_data', (data) => {
-        const timestamp = Date.now() / 1000
-        updateChartData(altitudeData, timestamp, data.altitude)
-        updateChartData(velocityData, timestamp, data.velocity)
-        updateChartData(temperatureData, timestamp, data.temperature)
-        updateChartData(batteryData, timestamp, data.battery)
-        
-        currentPosition.altitude = data.altitude
-        currentPosition.x = data.x || 0
-        currentPosition.y = data.y || 0
-        currentVelocity.value = data.velocity
-        flightPhase.value = data.phase || 'Unknown'
-      })
-      
-      socket.on('connect', () => {
-        telemetryConnected.value = true
-      })
-      
-      socket.on('disconnect', () => {
-        telemetryConnected.value = false
-      })
-      */
-    }
-
-    const formatTime = (seconds) => {
-      const minutes = Math.floor(seconds / 60)
-      const secs = Math.floor(seconds % 60)
-      return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-    }
-
-    // Lifecycle
-    onMounted(() => {
-      if (useTestData.value) {
-        startTestData()
-      } else {
-        connectToTelemetry()
-      }
-    })
-
-    onUnmounted(() => {
-      stopTestData()
-      // Uncomment when socket.js is available
-      /*
-      socket.off('telemetry_data')
-      socket.off('connect')
-      socket.off('disconnect')
-      */
-    })
-
-    return {
-      telemetryConnected,
-      useTestData,
-      missionTime,
-      flightPhase,
-      maxAltitude,
-      currentVelocity,
-      currentRange,
-      currentPosition,
-      altitudeData,
-      velocityData,
-      temperatureData,
-      batteryData,
-      accelerationData,
-      trajectoryPoints,
-      chartOptions,
-      accelerationChartOptions,
-      toggleTestMode,
-      formatTime
+  stop() {
+    this.isRunning = false
+    if (this.intervalId) {
+      clearTimeout(this.intervalId)
+      this.intervalId = null
     }
   }
+
+  addEventListener(callback) {
+    this.listeners.push(callback)
+  }
+
+  removeEventListener(callback) {
+    this.listeners = this.listeners.filter(l => l !== callback)
+  }
+
+  generateData() {
+    if (!this.isRunning) return
+
+    this.missionTime = (Date.now() - this.startTime) / 1000
+
+    // Simulate flight phases
+    if (this.missionTime < 5) {
+      this.flightPhase = 'Pre-Launch'
+    } else if (this.missionTime < 15) {
+      this.flightPhase = 'Launch'
+      this.altitude += 3 + Math.random() * 4
+      this.velocity.z = 20 + Math.random() * 15
+    } else if (this.missionTime < 45) {
+      this.flightPhase = 'Ascent'
+      this.altitude += 2 + Math.random() * 3
+      this.velocity.z = 10 + Math.random() * 8
+    } else if (this.missionTime < 60) {
+      this.flightPhase = 'Apogee'
+      this.altitude += 0.5 + Math.random() * 1
+      this.velocity.z = Math.random() * 4 - 2
+    } else if (this.missionTime < 120) {
+      this.flightPhase = 'Descent'
+      this.altitude -= 2 + Math.random() * 3
+      this.velocity.z = -(8 + Math.random() * 12)
+      if (this.altitude <= 0) {
+        this.altitude = 0
+        this.flightPhase = 'Landed'
+        this.velocity.z = 0
+      }
+    } else {
+      this.flightPhase = 'Landed'
+      this.altitude = 0
+      this.velocity.z = 0
+    }
+
+    // Generate mock telemetry data
+    const telemetryData = {
+      timestamp: Date.now(),
+      missionTime: this.missionTime,
+      flightPhase: this.flightPhase,
+      altitude: Math.max(0, this.altitude + Math.random() * 3 - 1.5),
+      velocity: {
+        x: Math.random() * 6 - 3,
+        y: Math.random() * 6 - 3,
+        z: this.velocity.z + Math.random() * 4 - 2
+      },
+      acceleration: {
+        x: Math.random() * 20 - 10,
+        y: Math.random() * 20 - 10,
+        z: Math.random() * 20 - 10
+      },
+      temperature: {
+        external: 15 + Math.random() * 8 - 4,
+        internal: 20 + Math.random() * 4 - 2
+      },
+      pressure: 1013 + Math.random() * 40 - 20,
+      battery: {
+        voltage: Math.max(10, 12.5 - this.missionTime * 0.01 + Math.random() * 0.5 - 0.25),
+        percentage: Math.max(0, 100 - this.missionTime * 0.8)
+      },
+      gps: {
+        latitude: 40.7128 + Math.random() * 0.002 - 0.001,
+        longitude: -74.0060 + Math.random() * 0.002 - 0.001,
+        altitude: this.altitude
+      },
+      position: {
+        x: Math.random() * 20 - 10,
+        y: Math.random() * 20 - 10,
+        altitude: this.altitude
+      }
+    }
+
+    // Notify all listeners
+    this.listeners.forEach(callback => {
+      try {
+        callback(telemetryData)
+      } catch (error) {
+        console.error('Error in telemetry callback:', error)
+      }
+    })
+
+    // Continue generating data
+    this.intervalId = setTimeout(() => this.generateData(), 200)
+  }
+}
+
+// Create mock data service instance
+const mockDataService = new MockDataService()
+
+// Local state for test data
+const telemetryConnected = ref(false)
+const missionTime = ref(0)
+const flightPhase = ref('Pre-Launch')
+const maxAltitude = ref(0)
+const currentVelocity = ref(0)
+const currentRange = ref(0)
+const currentPosition = reactive({
+  x: 0,
+  y: 0,
+  altitude: 0,
+  latitude: 0,
+  longitude: 0
+})
+
+const altitudeData = ref({ 
+  labels: [], 
+  datasets: [{ 
+    label: 'Altitude (m)', 
+    data: [], 
+    borderColor: '#42A5F5', 
+    backgroundColor: 'rgba(66, 165, 245, 0.1)', 
+    borderWidth: 2, 
+    fill: true, 
+    tension: 0.4 
+  }] 
+})
+
+const velocityData = ref({ 
+  labels: [], 
+  datasets: [{ 
+    label: 'Velocity (m/s)', 
+    data: [], 
+    borderColor: '#66BB6A', 
+    backgroundColor: 'rgba(102, 187, 106, 0.1)', 
+    borderWidth: 2, 
+    fill: true, 
+    tension: 0.4 
+  }] 
+})
+
+const temperatureData = ref({ 
+  labels: [], 
+  datasets: [{ 
+    label: 'Temperature (°C)', 
+    data: [], 
+    borderColor: '#FFA726', 
+    backgroundColor: 'rgba(255, 167, 38, 0.1)', 
+    borderWidth: 2, 
+    fill: true, 
+    tension: 0.4 
+  }] 
+})
+
+const batteryData = ref({ 
+  labels: [], 
+  datasets: [{ 
+    label: 'Battery (V)', 
+    data: [], 
+    borderColor: '#EF5350', 
+    backgroundColor: 'rgba(239, 83, 80, 0.1)', 
+    borderWidth: 2, 
+    fill: true, 
+    tension: 0.4 
+  }] 
+})
+
+const pressureData = ref({ 
+  labels: [], 
+  datasets: [{ 
+    label: 'Pressure (hPa)', 
+    data: [], 
+    borderColor: '#AB47BC', 
+    backgroundColor: 'rgba(171, 71, 188, 0.1)', 
+    borderWidth: 2, 
+    fill: true, 
+    tension: 0.4 
+  }] 
+})
+
+const accelerationData = ref({ 
+  labels: [], 
+  datasets: [ 
+    { 
+      label: 'X-Axis (m/s²)', 
+      data: [], 
+      borderColor: '#EF5350', 
+      backgroundColor: 'rgba(239, 83, 80, 0.1)', 
+      borderWidth: 2, 
+      tension: 0.4 
+    }, 
+    { 
+      label: 'Y-Axis (m/s²)', 
+      data: [], 
+      borderColor: '#42A5F5', 
+      backgroundColor: 'rgba(66, 165, 245, 0.1)', 
+      borderWidth: 2, 
+      tension: 0.4 
+    }, 
+    { 
+      label: 'Z-Axis (m/s²)', 
+      data: [], 
+      borderColor: '#66BB6A', 
+      backgroundColor: 'rgba(102, 187, 106, 0.1)', 
+      borderWidth: 2, 
+      tension: 0.4 
+    } 
+  ] 
+})
+
+const trajectoryPoints = ref([])
+const chartOptions = { 
+  responsive: true, 
+  maintainAspectRatio: false, 
+  scales: { 
+    x: { type: 'linear', position: 'bottom' }, 
+    y: { beginAtZero: false } 
+  }, 
+  plugins: { legend: { display: false } }, 
+  elements: { point: { radius: 0 } } 
+}
+
+const accelerationChartOptions = { 
+  responsive: true, 
+  maintainAspectRatio: false, 
+  scales: { 
+    x: { type: 'linear', position: 'bottom', grid: { color: 'rgba(255, 255, 255, 0.1)' } }, 
+    y: { beginAtZero: true, suggestedMin: -20, suggestedMax: 20, grid: { color: 'rgba(255, 255, 255, 0.1)' } } 
+  }, 
+  plugins: { 
+    legend: { 
+      display: true, 
+      position: 'top', 
+      labels: { color: 'rgba(255, 255, 255, 0.8)', font: { size: 10 } } 
+    } 
+  } 
+}
+
+// Mock data listener
+let mockListener = null
+
+// Helper functions
+const updateChartData = (chartData, timestamp, value) => {
+  const maxPoints = 50
+  chartData.value.labels.push(timestamp)
+  chartData.value.datasets[0].data.push(value)
+  if (chartData.value.labels.length > maxPoints) {
+    chartData.value.labels.shift()
+    chartData.value.datasets[0].data.shift()
+  }
+}
+
+const updateAccelerationData = (timestamp, x, y, z) => {
+  const maxPoints = 50
+  accelerationData.value.labels.push(timestamp)
+  accelerationData.value.datasets[0].data.push(x)
+  accelerationData.value.datasets[1].data.push(y)
+  accelerationData.value.datasets[2].data.push(z)
+  if (accelerationData.value.labels.length > maxPoints) {
+    accelerationData.value.labels.shift()
+    accelerationData.value.datasets.forEach(dataset => dataset.data.shift())
+  }
+}
+
+// Chart & trajectory data from telemetry
+function updateFromTelemetry(telemetry) {
+  if (!telemetry) return
+  
+  const timestamp = telemetry.missionTime || (Date.now() / 1000)
+  
+  // Update chart data
+  updateChartData(altitudeData, timestamp, telemetry.altitude || 0)
+  
+  // Velocity (magnitude)
+  let velocityMag = 0
+  if (telemetry.velocity && typeof telemetry.velocity === 'object') {
+    velocityMag = Math.sqrt(
+      Math.pow(telemetry.velocity.x || 0, 2) + 
+      Math.pow(telemetry.velocity.y || 0, 2) + 
+      Math.pow(telemetry.velocity.z || 0, 2)
+    )
+  }
+  updateChartData(velocityData, timestamp, velocityMag)
+  
+  // Temperature
+  let tempVal = 15
+  if (telemetry.temperature) {
+    if (typeof telemetry.temperature === 'object') {
+      tempVal = telemetry.temperature.external || telemetry.temperature.internal || 15
+    } else {
+      tempVal = telemetry.temperature
+    }
+  }
+  updateChartData(temperatureData, timestamp, tempVal)
+  
+  // Battery
+  let batteryVal = 12
+  if (telemetry.battery) {
+    if (typeof telemetry.battery === 'object') {
+      batteryVal = telemetry.battery.voltage || telemetry.battery.percentage || 12
+    } else {
+      batteryVal = telemetry.battery
+    }
+  }
+  updateChartData(batteryData, timestamp, batteryVal)
+  
+  // Pressure
+  updateChartData(pressureData, timestamp, telemetry.pressure || 1013)
+  
+  // Acceleration
+  if (telemetry.acceleration && typeof telemetry.acceleration === 'object') {
+    updateAccelerationData(
+      timestamp,
+      telemetry.acceleration.x || 0,
+      telemetry.acceleration.y || 0,
+      telemetry.acceleration.z || 0
+    )
+  }
+  
+  // Trajectory
+  let pos = telemetry.position || telemetry.gps || { x: 0, y: 0, altitude: telemetry.altitude || 0 }
+  trajectoryPoints.value.push({
+    x: pos.x || 0,
+    y: pos.y || 0,
+    z: pos.altitude || telemetry.altitude || 0,
+    timestamp
+  })
+  if (trajectoryPoints.value.length > 500) trajectoryPoints.value.shift()
+  
+  // Update current position and status
+  currentPosition.x = pos.x || 0
+  currentPosition.y = pos.y || 0
+  currentPosition.altitude = pos.altitude || telemetry.altitude || 0
+  currentPosition.latitude = pos.latitude || pos.lat || 0
+  currentPosition.longitude = pos.longitude || pos.lon || 0
+  
+  currentVelocity.value = velocityMag
+  currentRange.value = Math.sqrt(Math.pow(pos.x || 0, 2) + Math.pow(pos.y || 0, 2))
+  missionTime.value = telemetry.missionTime || 0
+  flightPhase.value = telemetry.flightPhase || 'Pre-Launch'
+  
+  if ((telemetry.altitude || 0) > maxAltitude.value) {
+    maxAltitude.value = telemetry.altitude || 0
+  }
+}
+
+// Test mode handling
+const toggleTestMode = () => {
+  emit('update:testMode', !props.testMode)
+}
+
+// Watch for telemetryData prop changes
+watch(() => props.telemetryData, (telemetry) => {
+  updateFromTelemetry(telemetry)
+}, { immediate: true, deep: true })
+
+// Watch testMode to start/stop mock data
+watch(() => props.testMode, (val) => {
+  if (val) {
+    console.log('Starting test mode...')
+    telemetryConnected.value = true
+    mockListener = (data) => {
+      updateFromTelemetry(data)
+    }
+    mockDataService.addEventListener(mockListener)
+    mockDataService.start()
+  } else {
+    console.log('Stopping test mode...')
+    telemetryConnected.value = false
+    if (mockListener) {
+      mockDataService.removeEventListener(mockListener)
+      mockListener = null
+    }
+    mockDataService.stop()
+    
+    // Clear all data
+    altitudeData.value.labels = []
+    altitudeData.value.datasets[0].data = []
+    velocityData.value.labels = []
+    velocityData.value.datasets[0].data = []
+    temperatureData.value.labels = []
+    temperatureData.value.datasets[0].data = []
+    batteryData.value.labels = []
+    batteryData.value.datasets[0].data = []
+    pressureData.value.labels = []
+    pressureData.value.datasets[0].data = []
+    accelerationData.value.labels = []
+    accelerationData.value.datasets.forEach(ds => ds.data = [])
+    trajectoryPoints.value = []
+    
+    missionTime.value = 0
+    flightPhase.value = 'Pre-Launch'
+    maxAltitude.value = 0
+    currentVelocity.value = 0
+    currentRange.value = 0
+    currentPosition.x = 0
+    currentPosition.y = 0
+    currentPosition.altitude = 0
+    currentPosition.latitude = 0
+    currentPosition.longitude = 0
+  }
+}, { immediate: true })
+
+// Lifecycle
+onMounted(() => {
+  console.log('Component mounted')
+})
+
+onUnmounted(() => {
+  console.log('Component unmounting...')
+  if (mockListener) {
+    mockDataService.removeEventListener(mockListener)
+    mockListener = null
+  }
+  mockDataService.stop()
+})
+
+// Time formatting function
+const formatTime = (seconds) => {
+  const hrs = Math.floor(seconds / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
 }
 </script>
 
 <style scoped>
+/* Keep your original CSS exactly as it was */
 .center-panel {
   padding: 20px;
   background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
   color: white;
   min-height: 90vh;
   border-radius: 12px;
-
-}
-
-.telemetry-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  backdrop-filter: blur(10px);
 }
 
 .telemetry-header {
@@ -484,27 +594,22 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
-  /* Reduced margin */
   padding: 8px;
-  /* Reduced padding */
   background: rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   backdrop-filter: blur(10px);
   min-height: 60px;
-  /* Fixed height */
 }
 
 .status-indicators {
-  display: inline-block;
-  align-items: center;
+  display: flex;
   flex-direction: row;
+  align-items: center;
   justify-content: center;
   border-radius: 10px;
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(5px);
-  display: flex;
-  flex-direction: row;
   background: rgba(255, 255, 255, 0.05);
   gap: 30px;
 }
@@ -516,9 +621,7 @@ export default {
   flex: 1 0 auto;
   min-width: 150px;
   height: 40px;
-;
-  justify-content:center;
-  align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 8px 15px 5px 8px;
   border-radius: 20px;
@@ -562,11 +665,9 @@ export default {
   display: grid;
   grid-template-columns: 2fr 1fr;
   grid-template-rows: 60vh 20vh;
-  /* Fixed heights instead of 1fr auto */
   gap: 30px;
   height: calc(100vh - 140px);
   overflow: hidden;
-  /* Prevent any overflow */
 }
 
 .trajectory-section {
@@ -574,35 +675,21 @@ export default {
   grid-row: 1;
   height: 100%;
   max-height: 65vh;
-  /* Constrain 3D trajectory height */
-}
-
-.trajectory-section {
-  grid-column: 2;
-  grid-row: 1;
-  height: 600px;
-  /* Match chart height */
 }
 
 .mission-status {
   grid-column: 1 / -1;
   grid-row: 2;
   max-height: 18vh;
-  /* Fixed maximum height */
   overflow-y: auto;
-  /* Allow internal scrolling if needed */
   min-height: 150px;
-  /* Ensure minimum usability */
 }
 
 .status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  /* Smaller min-width */
   gap: 8px;
-  /* Reduced gap */
   padding: 15px;
-  /* Reduced padding */
   background: rgba(255, 255, 255, 0.05);
   border-radius: 10px;
   backdrop-filter: blur(5px);
@@ -621,11 +708,11 @@ export default {
 
 .charts-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
   gap: 12px;
   height: calc(100% - 50px);
   max-height: 50vh;
-  /* Constrain chart height */
 }
 
 .telemetry-chart {
@@ -637,17 +724,6 @@ export default {
   height: 100%;
   display: flex;
   flex-direction: column;
-}
-
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
-  backdrop-filter: blur(5px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .status-item {
